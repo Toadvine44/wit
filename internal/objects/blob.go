@@ -17,12 +17,10 @@ import (
 type Blob struct {
 	filename string
 	Sha1     [20]byte
-	// ZipData []byte
 }
 
 func NewBlob(filename string) (*Blob, error) {
 	data, err := os.ReadFile(filename)
-	fmt.Printf("Bytes: %d read from %s\n", len(data), filename)
 	if err != nil {
 		return nil, err
 	}
@@ -30,26 +28,37 @@ func NewBlob(filename string) (*Blob, error) {
 	b := &Blob{}
 	b.filename = filename
 	b.Sha1 = b.hash(data)
-	fmt.Printf("Sha hash: %v\n", fmt.Sprintf("%x", b.Sha1[:]))
-
 	b.writeToDisk(data)
 	return b, nil
 }
 
+func compressFile(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	w, err := zlib.NewWriterLevel(&buf, zlib.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = w.Write(data)
+	if err != nil {
+		return nil, err
+	}
+	w.Close()
+	return buf.Bytes(), nil
+}
+
 func (b *Blob) writeToDisk(data []byte) error {
-	r := bytes.NewReader(data)
-	err := os.Mkdir(fmt.Sprintf("./.wit/objects/%s", string(b.Sha1[:2])), 0755)
-	outFile, err := os.Create(fmt.Sprintf("./.wit/objects/%s/%s", string(b.Sha1[:2]), string(b.Sha1[2:])))
+	err := os.Mkdir(fmt.Sprintf("./.wit/objects/%x", string(b.Sha1[:1])), 0755)
+	outFile, err := os.Create(fmt.Sprintf("./.wit/objects/%x/%x", string(b.Sha1[:1]), string(b.Sha1[1:])))
 	if err != nil {
 		return err
 	}
 	defer outFile.Close()
-	w, err := zlib.NewWriterLevel(outFile, zlib.BestCompression)
+	compressed, err := compressFile(data)
 	if err != nil {
 		return err
 	}
-	written, err := io.Copy(w, r)
-	fmt.Printf("Bytes written: %d\n", written)
+	_, err = io.Copy(outFile, bytes.NewReader(compressed))
 	return err
 }
 
